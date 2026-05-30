@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>VLESS-WSS-Nginx</title>
+  </head>
+  <body>
+    <h1>VLESS-WSS-Nginx</h1>
+
+    <p style="color:red;font-weight:bold;">DRAFT! DRAFT! DRAFT!</p>
+
+<p>Copied from <a href="https://github.com/XTLS/Xray-examples/tree/main/VLESS-WSS-Nginx" target="_blank">https://github.com/XTLS/Xray-examples/tree/main/VLESS-WSS-Nginx</a>.</p>
+
+<h2>Prepare server</h2>
+
+<p>1. Set up a DNS A record for your domain, which we we will put as <code>www.example.com</code> in the examples.</p>
+
+<p>2. SSH into your server as root:</p>
+
+<p><code>ssh root@www.example.com</code></p>
+
+<p>3. Open port 80 and port 443 for TCP Input.</p>
+
+<p>4. Update your server:</p>
+
+<p><code>apt update &amp;&amp; apt upgrade -y</code></p>
+
+
+
+<h2>Obtain SSL certificate</h2>
+
+<p>5. Get the ACME script for obtaining an SSL certificate:</p>
+
+<p><code>apt install -y socat</code></p>
+
+<p><code>curl https://get.acme.sh | sh</code></p>
+
+<p>6. Set a shorter alias for the ACME shell script:</p>
+
+<p><code>alias acme.sh=~/.acme.sh/acme.sh</code></p>
+
+<p>7. Set up ACME shell script auto-update:</p>
+
+<p><code>acme.sh --upgrade --auto-upgrade</code></p>
+
+<p>8. Change the default Certificate Authority to Let's Encrypt:</p>
+
+<p><code>acme.sh --set-default-ca --server letsencrypt</code></p>
+
+<p>9. Request issue of an SSL certificate:</p>
+
+<p><code>acme.sh --issue -d www.example.com --standalone</code></p>
+
+<p>10. Install the certificate to the <code>/etc/ssl/private</code> directory:</p>
+
+<p><code>acme.sh --install-cert -d www.example.com --ecc --fullchain-file /etc/ssl/private/fullchain.cer --key-file /etc/ssl/private/private.key</code></p>
+
+<p>11. Set the owner and group to work with the Xray server configuration file:</p>
+
+<p><code>chown -R nobody:nogroup /etc/ssl/private</code></p>
+
+<p>12. Force certificate renewal:</p>
+
+<p><code>acme.sh --renew -d www.example.com --force</code></p>
+
+
+
+<h2>Set up Nginx web server</h2>
+
+<p>13. Install Nginx:</p>
+
+<p><code>apt install -y nginx</code></p>
+
+<p>14. Create new Nginx available site configuration:</p>
+
+<p><code>vi /etc/nginx/sites-available/www.example.com</code></p>
+
+<p>15. Press <strong>i</strong> to enter insert mode.</p>
+
+<p>16. Copy and paste contents like this, except with your domain instead of <code>www.example.com</code> and with your choice of secret path to reach Xray:</p>
+
+<pre>
+server {
+	listen 443i ssl;
+	listen [::]:443 ssl;
+        http2 on;
+
+	server_name www.example.com;
+
+	index index.html index.htm index.nginx-debian.html;
+	root /var/www/html;
+
+	ssl_certificate /etc/ssl/private/fullchain.cer;
+	ssl_certificate_key /etc/ssl/private/private.key;
+	ssl_protocols TLSv1.2 TLSv1.3;
+	ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384;
+	
+	location /secretpath {
+	if ($http_upgrade != "websocket") {
+		return 404;
+	}
+        proxy_pass http://127.0.0.1:1234;
+	proxy_redirect off;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_read_timeout 5d;
+    }
+}
+</pre>
+
+<p>17. Press <strong>Esc</strong> to escape insert mode.</p>
+
+<p>18. Press <strong>:wq</strong> to write to file and quit the editor.</p>
+
+<p>19. Enable the new site:</p>
+
+<p><code>ln -s /etc/nginx/sites-available/www.example.com /etc/nginx/sites-enabled/</code></p>
+
+<p>20. Delete the default site listening on port 80:</p>
+
+<p><code>rm /etc/nginx/sites-enabled/default</code></p>
+
+<p>21. Restart Nginx with all these changes:</p>
+
+<p><code>systemctl restart nginx</code></p>
+
+<p>22. Check the status of the Nginx web server:</p>
+
+<p><code>systemctl status nginx</code></p>
+
+
+
+<h2>Set up Xray proxy server</h2>
+
+<p>23. Install Xray:</p>
+
+<p><code>bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install</code></p>
+
+<p>24. Generate your unqiue client UUID:</p>
+
+<p><code>xray uuid</code></p>
+
+<p>25. Edit the Xray server configuration:</p>
+
+<p><code>vi /usr/local/etc/xray/config.json</code></p>
+
+<p>26. Press <strong>dG</strong> to delete existing contents to end of file.</p>
+
+<p>27. Press <strong>i</strong> to enter insert mode.</p>
+
+<p>28. Copy and paste contents like this, except use your UUID and your choice of secret path:</p>
+
+<pre>
+{
+  "log": {
+    "loglevel": "warning"
+  },
+  "inbounds": [
+    {
+      "listen": "127.0.0.1",
+      "port": 1234,
+      "protocol": "vless",
+      "settings": {
+        "clients": [
+          {
+            "id": "5c632153-35c4-4e79-b337-49c73f553f3b" 
+          }
+        ],
+        "decryption": "none"
+      },
+      "streamSettings": {
+        "network": "ws",
+        "wsSettings": {
+          "path": "/secretpath" 
+        }
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": [
+          "http",
+          "tls"
+        ]
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "tag": "direct",
+      "protocol": "freedom",
+      "settings": {}
+    },
+    {
+      "tag": "blocked",
+      "protocol": "blackhole",
+      "settings": {}
+    }
+  ],
+  "routing": {
+    "domainStrategy": "IPIfNonMatch",
+    "rules": [
+      {
+        "ip": [
+          "geoip:private"
+        ],
+        "outboundTag": "blocked"
+      }
+    ]
+  }
+}
+</pre>
+
+<p>29. Press <strong>Esc</strong> to escape insert mode.</p>
+
+<p>30. Press <strong>:wq</strong> to write to file and quit the editor.</p>
+
+<p>31. Restart Xray with your configuration:</p>
+
+<p><code>systemctl restart xray</code></p>
+
+<p>32. Check the status of Xray after your restart with the new configuration:</p>
+
+<p><code>systemctl status xray</code></p>
+
+
+
+
+
+<h2>Set up v2rayN client</h2>
+
+<p>33. Download the Windows 64-bit clien zip file from <a href="https://github.com/2dust/v2rayN/releases" target="_blank">https://github.com/2dust/v2rayN/releases</a>.</p>
+
+<p>34. Unzip the zip file.</p>
+
+<p>35. Launch <code>v2rayN.exe</code>.</p>
+
+<p>36. Key in a VLESS configuration corresponding to this Xray core client configuration, but changing the details to match those on your server:</p>
+
+<pre>
+{
+  "log": {},
+  "inbounds": [
+    {
+      "port": "10808",
+      "protocol": "socks",
+      "settings": {
+        "auth": "noauth",
+        "udp": true
+      }
+    },
+    {
+      "port": "10809",
+      "protocol": "http",
+      "settings": {}
+    }
+  ],
+  "outbounds": [
+    {
+      "protocol": "vless",
+      "settings": {
+        "address": "www.example.com",
+        "port": 443,
+        "id": "5c632153-35c4-4e79-b337-49c73f553f3b", 
+        "encryption": "none"
+      },
+      "streamSettings": {
+        "network": "ws",
+        "security": "tls",
+        "wsSettings": {
+          "path": "/secretpath
+        },
+        "tlsSettings": {
+          "allowInsecure": false,
+          "serverName": "www.example.com", 
+          "fingerprint": "chrome" 
+        }
+      }
+    },
+    {
+      "tag": "direct",
+      "protocol": "freedom",
+      "settings": {}
+    },
+    {
+      "tag": "blocked",
+      "protocol": "blackhole",
+      "settings": {}
+    }
+  ],
+  "routing": {
+    "domainStrategy": "IPOnDemand",
+    "rules": [
+      {
+        "ip": [
+          "geoip:private"
+        ],
+        "outboundTag": "direct"
+      }
+    ]
+  }
+}
+</pre>
+
+<p>37. Confirm the configuration, and start the connection from your client to your server.</p>
+
+<p>38. Watch then message pane, and check that you see a positive ping time (a ping time of <code>-1</code> would mean an error has occurred).</p>
+
+<p>39. Configure your Windows system proxy or an individual browser to use the SOCKS proxy on <code>127.0.0.1</code> port <code>10808</code>.</p>
+
+
+
+  </body>
+</html>
+
+
