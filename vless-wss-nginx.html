@@ -12,13 +12,13 @@
 
 <h2>Prepare server</h2>
 
-<p>1. Set up a DNS A record for your domain, which we we will put as <code>www.example.com</code> in the examples.</p>
+<p>1. Set up DNS `A` records for your domain, which we we will put as <code>www.example.com</code> and <code>example.com</code> in the examples.</p>
 
 <p>2. SSH into your server as root:</p>
 
 <p><code>ssh root@www.example.com</code></p>
 
-<p>3. Open port 80 and port 443 for TCP Input.</p>
+<p>3. Open port 80 and port 443 for TCP input.</p>
 
 <p>4. Update your server:</p>
 
@@ -48,11 +48,11 @@
 
 <p>9. Request issue of an SSL certificate:</p>
 
-<p><code>acme.sh --issue -d www.example.com --standalone</code></p>
+<p><code>acme.sh --issue -d www.example.com -d example.com --standalone</code></p>
 
 <p>10. Install the certificate to the <code>/etc/ssl/private</code> directory:</p>
 
-<p><code>acme.sh --install-cert -d www.example.com --ecc --fullchain-file /etc/ssl/private/fullchain.cer --key-file /etc/ssl/private/private.key</code></p>
+<p><code>acme.sh --install-cert -d www.example.com -d example.com --fullchain-file /etc/ssl/private/fullchain.cer --key-file /etc/ssl/private/private.key</code></p>
 
 <p>11. Set the owner and group to work with the Xray server configuration file:</p>
 
@@ -60,7 +60,7 @@
 
 <p>12. Force certificate renewal:</p>
 
-<p><code>acme.sh --renew -d www.example.com --force</code></p>
+<p><code>acme.sh --renew -d www.example.com -d example.com --force</code></p>
 
 
 
@@ -84,7 +84,7 @@ server {
 	listen [::]:443 ssl;
         http2 on;
 
-	server_name www.example.com;
+	server_name www.example.com example.com;
 
 	index index.html index.htm index.nginx-debian.html;
 	root /var/www/html;
