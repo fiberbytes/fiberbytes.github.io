@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>VLESS-XHTTP-Reality</title>
+  </head>
+  <body>
+    <h1>VLESS-XHTTP-Reality</h1>
+
+    <p style="color:red;font-weight:bold;">DRAFT! DRAFT! DRAFT!</p>
+
+<p>The WebSocket transport in Xray is deprecated and may be removed. The recommended modern alternative is XHTTP. The configuration in this tutorial was copied from <a href="https://github.com/XTLS/Xray-examples/tree/main/VLESS-XHTTP-Reality/minimal-steal_others" target="_blank">https://github.com/XTLS/Xray-examples/tree/main/VLESS-XHTTP-Reality/minimal-steal_others</a>.</p>
+
+
+
+<h2>Prepare server</h2>
+
+<p>1. SSH into your server as root:</p>
+
+<p><code>ssh root@my.server.ip.address</code></p>
+
+<p>2. Choose a port number. The classic choice is port 443. The port number can be changed according to the needs of your situation. If you change it, you will need to also change the port you open in step 3.</p>
+
+<p>3. Open port 443 (or your choice for port) for TCP input.</p>
+
+<p>4. Update your server:</p>
+
+<p><code>apt update &amp;&amp; apt upgrade -y</code></p>
+
+<p>5. Install Xray:</p>
+
+<p><code>bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install</code></p>
+
+
+
+<h2>Choose parameters</h2>
+
+<p>6. Choose your client UUID. The field UUID can hold any string of length 1-30 bytes. If you want to fill it with a classic UUID then generate one by executing:</p>
+
+<p><code>xray uuid</code></p>
+
+<p>7. Choose your secret path. Choose a path to reach Xray. It will typically be 8-16 characters and must be kept secret. In the examples it is indicated by <code>/secretpath</code>. Replace this by your actual choice for a secret path.</p>
+
+<p>8. Generate a public-private key pair. The private key goes in the server configuration. The public key goes in the client configuration. Generate them both with a single command:</p>
+
+<p><code>xray x25519</code></p>
+
+<p>9. Choose the Reality target. The <code>target</code> field was originally named <code>dest</code>, but the new name has been used since version <code>24.10.31</code>. The minimum requirements for the target website are:</p>
+
+<ul>
+<li>It must be a foreign website.</li>
+<li>It must support TLS 1.3.</li>
+<li>It must support HTTP/2.</li>
+<li>The domain name must not redirect (except that the bare domain may potentially redirect to the <code>www</code> subdomain).</li>
+</ul>
+
+<p>You can check for TLS 1.3 on sites such as <a href="https://www.ssllabs.com/ssltest" target="_blank">https://www.ssllabs.com/ssltest</a>. You can check for HTTP/2 support in the Network tab of Developer Tools (F12) in Chrome or Firefox.</p>
+
+<p>On Linux you can check with the command:</p>
+
+<p><code>curl -I --tlsv1.3 --http2 https://www.example.com</code></p>
+
+<p>The target is typically a large global site such as <code>www.microsoft.com</code>, <code>www.apple.com</code>, or <code>www.samsung.com</code>. It must be reachable from your location.</p>
+
+<p>Some people find it works better to scan for a TLS-supporting site with a similar IP address to your server. You can scan for Reality-compatible sites with <a href="https://github.com/XTLS/RealiTLScanner" target="_blank">https://github.com/XTLS/RealiTLScanner</a>.</p>
+
+<p>10. For <code>serverNames</code>, take the <code>Cert's allowed domains</code> returned by executing:</p>
+
+<p><code>xray tls ping www.example.com</code></p>
+
+<p>11. The <code>shortIds</code> contains a list of shortIds available to the client. It can be used to distinguish different clients. If an empty string is specified, the client <code>shortId</code> can be empty. If non-empty, it should contain a hexadecimal number with an even length from 2 to 16 hexadecimal characters.</p>
+
+<p>12. Choose <code>spiderX</code>. It is recommended that the initial path and parameters for the crawler be different for each client.</p>
+
+<p>13. Choose the <code>fingerprint</code>. Xray uses the uTLS library to simulate a client browser with the given TLS fingerprint.</p>
+
+
+
+<h2>Configure server</h2>
+
+<p>14. Edit the Xray server configuration:</p>
+
+<p><code>vi /usr/local/etc/xray/config.json</code></p>
+
+<p>15. Press <strong>dG</strong> to delete existing contents to end of file.</p>
+
+<p>16. Press <strong>i</strong> to enter insert mode.</p>
+
+<p>17. Copy and paste contents like this, except use your parameters:</p>
+
+<pre>
+{
+    "inbounds": [
+        {
+            "listen": "0.0.0.0",
+            "port": 443,
+            "protocol": "vless",
+            "settings": {
+                "clients": [
+                    {
+                        "id": "f4192bd9-1540-4af9-a233-ebc0c630c0d2", 
+                        "flow": ""
+                    }
+                ],
+                "decryption": "none"
+            },
+            "streamSettings": {
+                "network": "xhttp",
+                "xhttpSettings": {
+                    "path": "/secretpath" 
+                },
+                "security": "reality",
+                "realitySettings": {
+                    "target": "www.example.com:443",
+                    "serverNames": [
+                        "www.example.com"
+                    ],
+                    "privateKey": "gPxmQMf5fsG-ze0Vitw2I-DVl9KWwaSiSaPWZJ8HSk0", 
+                    "shortIds": [ 
+                        "0123456789abcdef"
+                    ]
+                }
+            },
+            "sniffing": {
+                "enabled": true,
+                "destOverride": [
+                    "http",
+                    "tls",
+                    "quic"
+                ]
+            }
+        }
+    ],
+    "outbounds": [
+        {
+            "protocol": "freedom",
+            "tag": "direct"
+        },
+        {
+            "protocol": "blackhole",
+            "tag": "block"
+        }
+
+    ]
+}
+</pre>
+
+<p>18. Press <strong>Esc</strong> to escape insert mode.</p>
+
+<p>19. Press <strong>:wq</strong> to write to file and quit the editor.</p>
+
+<p>20. Restart Xray with your configuration:</p>
+
+<p><code>systemctl restart xray</code></p>
+
+<p>21. Check the status of Xray after your restart with the new configuration:</p>
+
+<p><code>systemctl status xray</code></p>
+
+
+
+
+
+<h2>Configure client</h2>
+
+<p>22. Download the Windows 64-bit clien zip file from <a href="https://github.com/2dust/v2rayN/releases" target="_blank">https://github.com/2dust/v2rayN/releases</a>.</p>
+
+<p>23. Unzip the zip file.</p>
+
+<p>24. Launch <code>v2rayN.exe</code>.</p>
+
+<p>25. Key in a VLESS configuration corresponding to this Xray core client configuration, but changing the details to match those on your server:</p>
+
+<pre>
+{
+    "routing": {
+        "rules": [
+            {
+                "ip": [
+                    "geoip:private"
+                ],
+                "outboundTag": "direct"
+            }
+        ]
+    },
+    "inbounds": [
+        {
+            "listen": "127.0.0.1",
+            "port": 10808,
+            "protocol": "socks"
+        }
+    ],
+    "outbounds": [
+        {
+            "protocol": "vless",
+            "settings": {
+                "address": "my.server.ip.address", 
+                "port": 443, 
+                "id": "f4192bd9-1540-4af9-a233-ebc0c630c0d2", 
+                "encryption": "none",
+                "flow": ""
+            },
+            "streamSettings": {
+                "network": "xhttp",
+                "xhttpSettings": {
+                    "path": "/secretpath" 
+                },
+                "security": "reality",
+                "realitySettings": {
+                    "serverName": "www.example.com", 
+                    "publicKey": "fnuLLbCV9Zj77N70tS-XTPc7UGbIt4_KWZIw1x8P2y0", 
+                    "shortId": "0123456789abcdef", 
+                    "spiderX": "/", 
+                    "fingerprint": "chrome" 
+                }
+            },
+            "tag": "proxy"
+        },
+        {
+            "protocol": "freedom",
+            "tag": "direct"
+        },
+        {
+            "protocol": "blackhole",
+            "tag": "block"
+        }
+
+    ]
+}
+</pre>
+
+<p>26. Confirm the configuration, and start the connection from your client to your server.</p>
+
+<p>27. Watch then message pane, and check that you see a positive ping time (a ping time of <code>-1</code> would mean an error has occurred).</p>
+
+<p>28. Configure your Windows system proxy or an individual browser to use the SOCKS proxy on <code>127.0.0.1</code> port <code>10808</code>.</p>
+
+
+
+  </body>
+</html>
+
+
